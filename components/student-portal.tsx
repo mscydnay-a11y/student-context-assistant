@@ -9,6 +9,7 @@ import {
   Check,
   ChevronDown,
   ClipboardCheck,
+  Copy,
   FileText,
   GraduationCap,
   LayoutDashboard,
@@ -29,6 +30,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { buildEvidenceBrief, type BriefPurpose } from '@/lib/evidence-brief';
 import {
   attendanceSummary,
   gradeAverage,
@@ -36,8 +38,10 @@ import {
   type Student,
 } from '@/lib/student-data';
 
-type Purpose = 'conference' | 'performance' | 'report-card';
+type Purpose = BriefPurpose;
 type ActivityEntry = { tool: string; studentId?: string; usedAt: string };
+
+const demoPrompt = 'Use the Northstar SIS tools to prepare me for a parent conference about Maya Rolle. Review her profile, attendance, English grades, and disciplinary records, then open an evidence brief for my approval.';
 
 const purposeLabels: Record<Purpose, string> = {
   conference: 'Parent conference',
@@ -51,6 +55,8 @@ export function StudentPortal() {
   const [purpose, setPurpose] = useState<Purpose>('conference');
   const [approved, setApproved] = useState(false);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [webMcpReady, setWebMcpReady] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
   const student = students.find((item) => item.id === studentId) ?? students[0];
 
   useEffect(() => {
@@ -65,12 +71,27 @@ export function StudentPortal() {
       const entry = (event as CustomEvent<ActivityEntry>).detail;
       setActivity((current) => [entry, ...current].slice(0, 4));
     };
+    const openAgentBrief = (event: Event) => {
+      const detail = (event as CustomEvent<{ studentId: string; purpose: Purpose }>).detail;
+      if (!students.some((item) => item.id === detail.studentId)) return;
+      setStudentId(detail.studentId);
+      setPurpose(detail.purpose);
+      setApproved(false);
+      setBriefOpen(true);
+    };
+    const markReady = () => setWebMcpReady(true);
+
+    setWebMcpReady(Boolean(document.modelContext));
 
     window.addEventListener('northstar:select-student', selectStudent);
     window.addEventListener('northstar:tool-used', recordToolUse);
+    window.addEventListener('northstar:open-brief', openAgentBrief);
+    window.addEventListener('northstar:webmcp-ready', markReady);
     return () => {
       window.removeEventListener('northstar:select-student', selectStudent);
       window.removeEventListener('northstar:tool-used', recordToolUse);
+      window.removeEventListener('northstar:open-brief', openAgentBrief);
+      window.removeEventListener('northstar:webmcp-ready', markReady);
     };
   }, []);
 
@@ -83,12 +104,18 @@ export function StudentPortal() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [briefOpen]);
 
-  const brief = useMemo(() => buildBrief(student, purpose), [student, purpose]);
+  const brief = useMemo(() => buildEvidenceBrief(student, purpose), [student, purpose]);
 
   function openBrief(nextPurpose: Purpose) {
     setPurpose(nextPurpose);
     setApproved(false);
     setBriefOpen(true);
+  }
+
+  async function copyDemoPrompt() {
+    await navigator.clipboard.writeText(demoPrompt);
+    setPromptCopied(true);
+    window.setTimeout(() => setPromptCopied(false), 1800);
   }
 
   return (
@@ -105,6 +132,10 @@ export function StudentPortal() {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className={`hidden items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-semibold sm:flex ${webMcpReady ? 'border-[#b9ded3] bg-[#edf8f4] text-[#176454]' : 'border-border bg-muted text-muted-foreground'}`}>
+            <span className={`size-1.5 rounded-full ${webMcpReady ? 'bg-[#2f806c]' : 'bg-muted-foreground'}`} />
+            {webMcpReady ? 'WebMCP ready · 7 tools' : 'Checking WebMCP'}
+          </div>
           <button aria-label="Notifications" className="grid size-9 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground">
             <Bell className="size-4" />
           </button>
@@ -165,14 +196,23 @@ export function StudentPortal() {
             <div className="space-y-4">
               <Card className="rounded-2xl border-primary/15 bg-[#f4faf7] py-0 shadow-none ring-0">
                 <CardHeader className="border-b border-[#d9ebe4] py-4">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-[#176454]"><Sparkles className="size-4" />Agent-ready workspace</div>
-                  <CardTitle className="mt-1 text-lg">Build from verified records</CardTitle>
-                  <CardDescription>Start a purpose-specific draft. The teacher remains the final reviewer.</CardDescription>
+                  <div className="flex items-center gap-2 text-xs font-semibold text-[#176454]"><Sparkles className="size-4" />Guided WebMCP demo</div>
+                  <CardTitle className="mt-1 text-lg">Ask the browser agent</CardTitle>
+                  <CardDescription>Use this prompt to show the full evidence-to-review flow.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 py-4">
-                  <PromptCard copy="Prepare me for a parent conference" onClick={() => openBrief('conference')} />
-                  <PromptCard copy="Explain the recent test performance" onClick={() => openBrief('performance')} />
-                  <PromptCard copy="Draft a Term 1 report-card comment" onClick={() => openBrief('report-card')} />
+                  <div className="rounded-xl border border-[#cfe6df] bg-white p-3">
+                    <p className="text-xs leading-5 text-foreground">“{demoPrompt}”</p>
+                    <Button onClick={copyDemoPrompt} variant="outline" size="sm" className="mt-3 w-full border-[#cfe6df]">
+                      {promptCopied ? <><Check />Prompt copied</> : <><Copy />Copy demo prompt</>}
+                    </Button>
+                  </div>
+                  <p className="pt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Teacher preview shortcuts</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <PromptCard label="Conference" onClick={() => openBrief('conference')} />
+                    <PromptCard label="Tests" onClick={() => openBrief('performance')} />
+                    <PromptCard label="Comment" onClick={() => openBrief('report-card')} />
+                  </div>
                 </CardContent>
               </Card>
 
@@ -315,7 +355,7 @@ function ActivityCard({ entries }: { entries: ActivityEntry[] }) {
     <Card size="sm" className="rounded-2xl shadow-none">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-sm"><Activity className="size-4 text-primary" />WebMCP activity</CardTitle>
-        <CardDescription className="text-xs">Six scoped tools are available to the browser agent.</CardDescription>
+        <CardDescription className="text-xs">Seven scoped tools connect agent research to visible teacher review.</CardDescription>
       </CardHeader>
       <CardContent>
         {entries.length ? (
@@ -357,34 +397,6 @@ function BriefSection({ title, items, tone = 'fact' }: { title: string; items: s
   );
 }
 
-function buildBrief(student: Student, purpose: Purpose) {
-  const summary = attendanceSummary(student);
-  const average = gradeAverage(student);
-  const latest = student.grades[0];
-  const tests = student.grades.filter((grade) => grade.category === 'Test');
-  const assignments = student.grades.filter((grade) => grade.category === 'Assignment');
-  const sourceCount = student.attendance.length + student.grades.length + student.discipline.length;
-  const facts = [
-    `${student.firstName} has a current English average of ${average}% across ${student.grades.length} graded records.`,
-    latest ? `The most recent assessment was ${latest.title}: ${latest.score}/${latest.outOf} on ${latest.date} (${latest.sourceId}).` : 'No graded assessment is recorded.',
-    `${summary.absent} absence${summary.absent === 1 ? '' : 's'} and ${summary.late} late arrival${summary.late === 1 ? '' : 's'} appear in ${summary.recordedDays} dated attendance records.`,
-    `${student.discipline.length} disciplinary record${student.discipline.length === 1 ? '' : 's'} appear${student.discipline.length === 1 ? 's' : ''} this term.`,
-  ];
-  const patterns = tests.length && assignments.length
-    ? [`The recorded test average is ${Math.round(tests.reduce((sum, item) => sum + item.score / item.outOf * 100, 0) / tests.length)}%, compared with ${Math.round(assignments.reduce((sum, item) => sum + item.score / item.outOf * 100, 0) / assignments.length)}% across recorded assignments.`, 'Attendance, grade, and disciplinary records are shown together for context; the records do not establish causation.']
-    : ['The available records are not sufficient to compare test and assignment performance.', 'The records do not establish causation.'];
-  const questions = purpose === 'report-card'
-    ? ['Does this wording reflect what you have directly observed in class?', 'Is there a specific next step you want the student and guardian to act on?']
-    : ['What does the student find different about tests compared with assignments?', 'Which support strategy has felt most helpful so far?', 'What next step can school, student, and guardian each agree to?'];
-  const draft = purpose === 'report-card'
-    ? `${student.firstName} demonstrates stronger performance on completed English assignments than on recent tests. ${student.firstName} contributes developing ideas and would benefit from consistently supporting written responses with specific textual evidence. Continued preparation before assessments and careful review of feedback should support further progress.`
-    : purpose === 'performance'
-      ? `The available records show a difference between ${student.firstName}’s test and assignment performance. The next conversation should explore assessment preparation and use of textual evidence without assuming a cause.`
-      : `Begin with ${student.firstName}’s strengths in completed assignments, review the two recent test records, and invite the student and guardian to help identify a practical next step.`;
-
-  return { facts, patterns, questions, draft, sourceCount };
-}
-
 function NavItem({ icon, label, active = false }: { icon: React.ReactNode; label: string; active?: boolean }) {
   return <button className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}><span className="[&_svg]:size-4">{icon}</span>{label}</button>;
 }
@@ -393,6 +405,6 @@ function Metric({ label, value, note }: { label: string; value: string; note: st
   return <div className="rounded-xl border border-border bg-muted/25 p-3"><p className="text-[11px] font-medium text-muted-foreground">{label}</p><p className="mt-1 font-heading text-xl font-semibold tracking-tight">{value}</p><p className="mt-0.5 text-[10px] text-muted-foreground">{note}</p></div>;
 }
 
-function PromptCard({ copy, onClick }: { copy: string; onClick: () => void }) {
-  return <button onClick={onClick} className="group flex w-full items-center justify-between gap-3 rounded-xl border border-[#d9ebe4] bg-white px-3 py-3 text-left text-xs font-medium transition hover:border-primary/40 hover:shadow-sm"><span>{copy}</span><Sparkles className="size-3.5 shrink-0 text-[#4f8f80] transition group-hover:text-primary" /></button>;
+function PromptCard({ label, onClick }: { label: string; onClick: () => void }) {
+  return <button onClick={onClick} className="group flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border border-[#d9ebe4] bg-white px-2 py-2 text-center text-[11px] font-medium transition hover:border-primary/40 hover:shadow-sm"><Sparkles className="size-3.5 text-[#4f8f80] transition group-hover:text-primary" /><span>{label}</span></button>;
 }

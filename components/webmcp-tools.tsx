@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 
+import { buildEvidenceBrief, type BriefPurpose } from '@/lib/evidence-brief';
 import {
   attendanceSummary,
   getStudent,
@@ -38,6 +39,12 @@ const studentIdSchema = {
   },
   required: ['student_id'],
   additionalProperties: false,
+};
+
+const purposeMap: Record<string, BriefPurpose> = {
+  parent_conference: 'conference',
+  test_performance: 'performance',
+  report_card: 'report-card',
 };
 
 function publicProfile(student: Student) {
@@ -177,13 +184,57 @@ export function WebMcpTools() {
           return { opened: publicProfile(student), teacherReviewRequired: true };
         },
       },
+      {
+        name: 'prepare_evidence_brief',
+        description:
+          'Prepare and visibly open a teacher-reviewable evidence brief for an authorized student after consulting the relevant student profile, attendance, grade, and disciplinary tools. This creates no permanent student record and sends nothing to a guardian.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            student_id: {
+              type: 'string',
+              description: 'The exact Northstar student ID, for example NS-1048.',
+            },
+            purpose: {
+              type: 'string',
+              enum: ['parent_conference', 'test_performance', 'report_card'],
+              description: 'The teacher-approved purpose for the evidence brief.',
+            },
+          },
+          required: ['student_id', 'purpose'],
+          additionalProperties: false,
+        },
+        annotations: { readOnlyHint: true, untrustedContentHint: false },
+        execute: ({ student_id, purpose }) => {
+          const student = requireStudent(student_id);
+          const mappedPurpose = purposeMap[String(purpose)];
+          if (!mappedPurpose) throw new Error('purpose must be parent_conference, test_performance, or report_card.');
+          const brief = buildEvidenceBrief(student, mappedPurpose);
+          window.dispatchEvent(
+            new CustomEvent('northstar:open-brief', {
+              detail: { studentId: student.id, purpose: mappedPurpose },
+            }),
+          );
+          notifyToolUse('prepare_evidence_brief', student.id);
+          return {
+            student: publicProfile(student),
+            brief,
+            visibleReviewOpened: true,
+            syntheticData: true,
+          };
+        },
+      },
     ];
 
     Promise.all(
       tools.map((tool) => modelContext.registerTool(tool, { signal: controller.signal })),
-    ).catch((error) => {
-      console.warn('Northstar WebMCP tools could not be registered.', error);
-    });
+    )
+      .then(() => {
+        window.dispatchEvent(new CustomEvent('northstar:webmcp-ready', { detail: { toolCount: tools.length } }));
+      })
+      .catch((error) => {
+        console.warn('Northstar WebMCP tools could not be registered.', error);
+      });
 
     return () => controller.abort();
   }, []);

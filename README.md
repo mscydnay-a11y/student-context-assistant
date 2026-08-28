@@ -6,7 +6,7 @@ The MVP uses entirely synthetic data. Mrs. Codexa can switch between students in
 
 ## WebMCP tools
 
-The site registers six browser tools through `document.modelContext`: `search_students`, `get_student_profile`, `get_attendance_records`, `get_grade_records`, `get_disciplinary_records`, and `open_student_record`. The first five return scoped, read-only records. The final tool changes the visible student record so the teacher can review it directly. Invocations appear in the on-screen WebMCP activity panel.
+The site registers seven browser tools through `document.modelContext`: `search_students`, `get_student_profile`, `get_attendance_records`, `get_grade_records`, `get_disciplinary_records`, `open_student_record`, and `prepare_evidence_brief`. The record tools return scoped, read-only evidence. The final two connect agent work to the visible teacher-review surface without creating a permanent record. Invocations appear in the on-screen WebMCP activity panel.
 
 ## Run locally
 
