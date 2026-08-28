@@ -263,11 +263,28 @@ export function StudentPortal() {
             </div>
           </div>
 
-          <footer className="mt-5 flex flex-col-reverse items-center justify-between gap-3 border-t border-border bg-muted/50 p-4 sm:flex-row">
-            <p className="text-xs text-muted-foreground">{brief.sourceCount} source records referenced</p>
-            <Button onClick={() => setApproved(true)} disabled={approved} className="min-w-36">
-              {approved ? <><Check />Approved for use</> : <><ClipboardCheck />Approve draft</>}
-            </Button>
+          <footer className="mt-5 border-t border-border bg-muted/50 p-4">
+            {approved ? (
+              <div role="status" aria-live="polite" className="flex flex-col gap-3 rounded-xl border border-[#b9ded3] bg-[#edf8f4] p-4 sm:flex-row sm:items-center">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#d5eee5] text-[#176454]">
+                  <Check className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="font-heading text-base font-semibold text-[#124f43]">Review recorded</p>
+                  <p className="mt-0.5 text-xs leading-5 text-[#376b60]">Approved by Mrs. Codexa for teacher use. Nothing was sent to a guardian or added to the student record.</p>
+                </div>
+                <Button onClick={() => setBriefOpen(false)} variant="outline" className="shrink-0 border-[#9fcec1] bg-white text-[#124f43] hover:bg-[#f7fcfa]">
+                  Return to student record
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col-reverse items-center justify-between gap-3 sm:flex-row">
+                <p className="text-xs text-muted-foreground">{brief.sourceCount} source records referenced</p>
+                <Button onClick={() => setApproved(true)} className="min-w-36">
+                  <ClipboardCheck />Approve draft
+                </Button>
+              </div>
+            )}
           </footer>
           </div>
         </div>
